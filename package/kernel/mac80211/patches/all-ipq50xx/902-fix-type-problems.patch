@@ -1,0 +1,11 @@
+--- backports-20210222-5.4-qsdk-11.5.0.5.orig/net/mac80211/debugfs_netdev.c
++++ backports-20210222-5.4-qsdk-11.5.0.5/net/mac80211/debugfs_netdev.c
+@@ -300,7 +300,7 @@ static ssize_t ieee80211_if_parse_smps(s
+ }
+ IEEE80211_IF_FILE_RW(smps);
+ 
+-int ieee80211_if_fmt_bmiss_threshold(const struct ieee80211_sub_if_data *sdata,
++ssize_t ieee80211_if_fmt_bmiss_threshold(const struct ieee80211_sub_if_data *sdata,
+ 				     char *buf, int buflen)
+ {
+ 	return snprintf(buf, buflen, "%u\n", sdata->vif.bmiss_threshold);
