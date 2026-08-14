@@ -11,6 +11,9 @@ platform_check_image() {
 			mi_dualboot_check_image "$1"
 			return $?
 			;;
+		cmcc,rg-ma3063)
+			return 0
+			;;
 		*)
 			v "Sysupgrade is not supported on your board($board) yet."
 			return 1
@@ -24,6 +27,10 @@ platform_do_upgrade() {
 		redmi,ax3000|\
 		xiaomi,cr881x)
 			mi_dualboot_do_upgrade "$1"
+			;;
+		cmcc,rg-ma3063)
+			CI_UBIPART = "firmware"
+			nand_do_upgrade "$1"
 			;;
 		*)
 			default_do_upgrade "$1"
