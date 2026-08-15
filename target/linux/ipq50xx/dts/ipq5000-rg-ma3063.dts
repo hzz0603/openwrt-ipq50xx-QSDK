@@ -344,9 +344,8 @@
 &mdio1 {
 	pinctrl-0 = <&mdio1_pins>;
 	pinctrl-names = "default";
+	phy-reset-gpio = <&tlmm 26 GPIO_ACTIVE_LOW>;
 	status = "ok";
-
-	reset-gpios = <&tlmm 26 GPIO_ACTIVE_LOW>;
 
 	// QCA8337 Phy0 -> LAN1
 	ethernet-phy@0 {
@@ -412,7 +411,7 @@
 	boot-args = </*       type: */ 0x2 /* PCIE1 */
 		     /*     length: */ 4
 		     /*      PD id: */ 2
-		     /* reset GPIO: */ 27
+		     /* reset GPIO: */ 18
 		     /*   reserved: */ 0 0>;
 
 	status = "ok";
