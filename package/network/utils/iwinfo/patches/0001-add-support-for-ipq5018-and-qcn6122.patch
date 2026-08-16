@@ -1,0 +1,34 @@
+Index: libiwinfo-2022-08-19-0dad3e66/devices.txt
+===================================================================
+--- libiwinfo-2022-08-19-0dad3e66.orig/devices.txt
++++ libiwinfo-2022-08-19-0dad3e66/devices.txt
+@@ -167,6 +167,8 @@
+ 0x168c 0x003c 0x1a56 0x1420    0      0  "Qualcomm Atheros" "QCA9862"
+ 0x168c 0x003c 0x19b6 0xd03c    0      0  "Mikrotik" "R11e-5HacT"
+ 0x168c 0x003c 0x168c 0x4019    0      0  "Qualcomm Atheros" "IPQ4019"
++0x168c 0x003c 0x168c 0x5018    0      0  "Qualcomm Atheros" "IPQ5018"
++0x168c 0x003c 0x168c 0x6122    0      0  "Qualcomm Atheros" "QCN6102/QCN6122"
+ 0x168c 0x003c 0x19b6 0xd075    0      0  "Mikrotik" "R11e-5HacD"
+ 0x168c 0x0040 0x168c 0x0002    0      0  "Qualcomm Atheros" "QCA9990"
+ 0x168c 0x0046 0x168c 0xcafe    0      0  "Qualcomm Atheros" "QCA9984"
+Index: libiwinfo-2022-08-19-0dad3e66/iwinfo_nl80211.c
+===================================================================
+--- libiwinfo-2022-08-19-0dad3e66.orig/iwinfo_nl80211.c
++++ libiwinfo-2022-08-19-0dad3e66/iwinfo_nl80211.c
+@@ -3405,6 +3405,16 @@ static int nl80211_hardware_id_from_fdt(
+ 		id->device_id = 0x003c;
+ 		id->subsystem_vendor_id = 0x168c;
+ 		id->subsystem_device_id = 0x4019;
++	} else if (!strcmp(compat, "qcom,ipq5018-wifi")) {
++		id->vendor_id = 0x168c;
++		id->device_id = 0x003c;
++		id->subsystem_vendor_id = 0x168c;
++		id->subsystem_device_id = 0x5018;
++	} else if (!strcmp(compat, "qcom,qcn6122-wifi")) {
++		id->vendor_id = 0x168c;
++		id->device_id = 0x003c;
++		id->subsystem_vendor_id = 0x168c;
++		id->subsystem_device_id = 0x6122;
+ 	} else if (!strcmp(compat, "mediatek,mt7622-wmac")) {
+ 		id->vendor_id = 0x14c3;
+ 		id->device_id = 0x7622;
