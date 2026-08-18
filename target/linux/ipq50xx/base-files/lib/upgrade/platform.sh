@@ -29,7 +29,7 @@ platform_do_upgrade() {
 			mi_dualboot_do_upgrade "$1"
 			;;
 		cmcc,rg-ma3063)
-			CI_UBIPART = "firmware"
+			CI_UBIPART="firmware"
 			nand_do_upgrade "$1"
 			;;
 		*)
