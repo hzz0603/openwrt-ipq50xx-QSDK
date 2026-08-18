@@ -18,8 +18,8 @@
 		ethernet0 = &mac0;
 		ethernet1 = &mac1;
 
-		led-boot = &led_status_green;
-		led-failsafe = &led_status_red;
+		led-boot = &led_status_red;
+		led-failsafe = &led_status_blue;
 		led-running = &led_status_green;
 		led-upgrade = &led_status_blue;
 	};
@@ -27,7 +27,7 @@
 	chosen {
 		// Override the root parameter from u-boot
 		// Increase coherent_pool size for WiFi
-		bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M";
+		bootargs-append = " ubi.mtd=firmware rootfstype=squashfs root=/dev/ubiblock0_1 coherent_pool=2M rootwait";
 		stdout-path = "serial0:115200n8";
 	};
 
@@ -102,21 +102,21 @@
 
 	leds_pins: leds_pins {
 		led_status_red {
-			pins = "gpio19";
+			pins = "gpio32";
 			function = "gpio";
 			drive-strength = <8>;
 			bias-pull-down;
 		};
 
 		led_status_green {
-			pins = "gpio22";
+			pins = "gpio31";
 			function = "gpio";
 			drive-strength = <8>;
 			bias-pull-down;
 		};
 
 		led_status_blue {
-			pins = "gpio17";
+			pins = "gpio38";
 			function = "gpio";
 			drive-strength = <8>;
 			bias-pull-down;
@@ -167,19 +167,19 @@
 		pinctrl-names = "default";
 
 		led_status_red: led_status_red {
-			label = "blue:system";
-			gpio = <&tlmm 19 GPIO_ACTIVE_HIGH>;
+			label = "red:system";
+			gpio = <&tlmm 32 GPIO_ACTIVE_HIGH>;
 			default-state = "on";
 		};
 
 		led_status_green: led_status_green {
-			label = "yellow:system";
-			gpio = <&tlmm 22 GPIO_ACTIVE_HIGH>;
+			label = "green:system";
+			gpio = <&tlmm 31 GPIO_ACTIVE_HIGH>;
 		};
 
 		led_status_blue: led_status_blue {
-			label = "blue:internet";
-			gpio = <&tlmm 17 GPIO_ACTIVE_HIGH>;
+			label = "blue:system";
+			gpio = <&tlmm 38 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
