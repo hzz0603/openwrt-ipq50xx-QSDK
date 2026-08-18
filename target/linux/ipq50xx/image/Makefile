@@ -60,8 +60,9 @@ define Device/cmcc_rg-ma3063
   BLOCKSIZE := 128k
   PAGESIZE := 2048
   DEVICE_DTS_CONFIG := config@mp02.1
-  IMAGES := nand-factory.ubi
+  IMAGES := nand-factory.ubi nand-sysupgrade.bin
   DEVICE_PACKAGES := \
+  ATH11K_MEM_PROFILE_256M \
 	ath11k-firmware-ipq5018 \
 	ath11k-firmware-qcn6122 \
 	ipq-wifi-cmcc_rg-ma3063
