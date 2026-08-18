@@ -633,6 +633,7 @@ MAKE_OPTS+=match=y
 endif
 
 ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv-mirror),)
+EXTRA_CFLAGS+= -I$(PKG_BUILD_DIR)/exports
 MAKE_OPTS+=mirror=y
 endif
 
