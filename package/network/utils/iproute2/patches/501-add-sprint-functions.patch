@@ -1,0 +1,45 @@
+Index: iproute2-5.11.0/tc/tc_util.c
+===================================================================
+--- iproute2-5.11.0.orig/tc/tc_util.c
++++ iproute2-5.11.0/tc/tc_util.c
+@@ -157,6 +157,28 @@ int print_tc_classid(char *buf, int blen
+ 	return 0;
+ }
+ 
++char *sprint_rate(__u64 rate, char *buf) {
++	int len = SPRINT_BSIZE-1;
++	extern int use_iec;
++	unsigned long kilo = use_iec ? 1024 : 1000;
++	const char *str = use_iec ? "i" : "";
++	int i = 0;
++	static char *units[5] = {"", "K", "M", "G", "T"};
++
++	rate <<= 3; /* bytes/sec -> bits/sec */
++
++	for (i = 0; i < ARRAY_SIZE(units); i++)  {
++		if (rate < kilo)
++			break;
++		if (((rate % kilo) != 0) && rate < 1000*kilo)
++			break;
++		rate /= kilo;
++	}
++	snprintf(buf, len, "%.0f%s%sbit", (double)rate, units[i], str);
++
++	return buf;
++}
++
+ char *sprint_tc_classid(__u32 h, char *buf)
+ {
+ 	if (print_tc_classid(buf, SPRINT_BSIZE-1, h))
+Index: iproute2-5.11.0/tc/tc_util.h
+===================================================================
+--- iproute2-5.11.0.orig/tc/tc_util.h
++++ iproute2-5.11.0/tc/tc_util.h
+@@ -85,6 +85,7 @@ void tc_print_rate(enum output_type t, c
+ 		   unsigned long long rate);
+ void print_devname(enum output_type type, int ifindex);
+ 
++char *sprint_rate(__u64 rate, char *buf);
+ char *sprint_tc_classid(__u32 h, char *buf);
+ char *sprint_ticks(__u32 ticks, char *buf);
+ char *sprint_linklayer(unsigned int linklayer, char *buf);
