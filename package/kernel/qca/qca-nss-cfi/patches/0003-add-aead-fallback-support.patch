@@ -1,0 +1,87 @@
+Index: qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi_aead.c
+===================================================================
+--- qca-nss-cfi-4e363d52.orig/cryptoapi/v2.0/nss_cryptoapi_aead.c
++++ qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi_aead.c
+@@ -186,7 +186,7 @@ int nss_cryptoapi_aead_setkey_noauth(str
+ 	struct nss_crypto_session_data data = {0};
+ 	const uint8_t *nonce = NULL;
+ 	uint16_t nonce_sz;
+-	int32_t status;
++	int32_t status, ret;
+ 
+ 	/*
+ 	 * Validate magic number - init should be called before setkey
+@@ -203,6 +203,32 @@ int nss_cryptoapi_aead_setkey_noauth(str
+ 	if (ctx->info->algo >= NSS_CRYPTO_CMN_ALGO_MAX)
+ 		return -ERANGE;
+ 
++	/*
++	 * If an algorithm in not enabled in hardware, fallback to software
++	 */
++	if (!nss_crypto_algo_is_supp(ctx->info->algo)) {
++		ctx->fallback_req = true;
++		ctx->sid = NSS_CRYPTO_MAX_IDXS;
++
++		/*
++		 * Set flags for fallback tfm
++		 */
++		crypto_tfm_clear_flags(ctx->sw_tfm, CRYPTO_TFM_REQ_MASK);
++		crypto_tfm_set_flags(ctx->sw_tfm, crypto_aead_get_flags(aead) & CRYPTO_TFM_REQ_MASK);
++
++		/*
++		 * Set the key for fallback tfm */
++		ret = crypto_aead_setkey(__crypto_aead_cast(ctx->sw_tfm), key, keylen);
++		if (ret) {
++			nss_cfi_err("Setkey failed for software fallback\n");
++			crypto_aead_set_flags(aead, crypto_tfm_get_flags(ctx->sw_tfm));
++		}
++
++		return ret;
++	} else {
++		ctx->fallback_req = false;
++	}
++
+ 	if (ctx->sid != NSS_CRYPTO_SESSION_MAX) {
+ 		nss_crypto_session_free(ctx->user, ctx->sid);
+ 		ctx->sid = NSS_CRYPTO_SESSION_MAX;
+@@ -276,13 +302,6 @@ int nss_cryptoapi_aead_setkey(struct cry
+ 
+ 	ctx->iv_size = crypto_aead_ivsize(aead);
+ 
+-	if (ctx->info->cipher_mode == NSS_CRYPTOAPI_CIPHER_MODE_CTR_RFC3686) {
+-		keys.enckeylen = keys.enckeylen - CTR_RFC3686_NONCE_SIZE;
+-		memcpy(ctx->ctx_iv, keys.enckey + keys.enckeylen, CTR_RFC3686_NONCE_SIZE);
+-		ctx->ctx_iv[3] = ntohl(0x1);
+-		ctx->iv_size += CTR_RFC3686_NONCE_SIZE + sizeof(uint32_t);
+-	}
+-
+ 	/*
+ 	 * Validate if auth key length exceeds what we support
+ 	 */
+@@ -295,7 +314,7 @@ int nss_cryptoapi_aead_setkey(struct cry
+ 	/*
+ 	 * If an algorithm in not enabled in hardware, fallback to software
+ 	 */
+-	if (ctx->sw_tfm) {
++	if (!nss_crypto_algo_is_supp(ctx->info->algo)) {
+ 		ctx->fallback_req = true;
+ 		ctx->sid = NSS_CRYPTO_MAX_IDXS;
+ 
+@@ -314,6 +333,17 @@ int nss_cryptoapi_aead_setkey(struct cry
+ 		}
+ 
+ 		return ret;
++	} else {
++		ctx->fallback_req = false;
++	}
++
++	if (!ctx->fallback_req) {
++		if (ctx->info->cipher_mode == NSS_CRYPTOAPI_CIPHER_MODE_CTR_RFC3686) {
++			keys.enckeylen = keys.enckeylen - CTR_RFC3686_NONCE_SIZE;
++			memcpy(ctx->ctx_iv, keys.enckey + keys.enckeylen, CTR_RFC3686_NONCE_SIZE);
++			ctx->ctx_iv[3] = ntohl(0x1);
++			ctx->iv_size += CTR_RFC3686_NONCE_SIZE + sizeof(uint32_t);
++		}
+ 	}
+ 
+ 	data.algo = ctx->info->algo;

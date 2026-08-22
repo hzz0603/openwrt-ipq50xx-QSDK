@@ -1,0 +1,22 @@
+Index: qca-nss-cfi-4e363d52/Makefile
+===================================================================
+--- qca-nss-cfi-4e363d52.orig/Makefile
++++ qca-nss-cfi-4e363d52/Makefile
+@@ -4,14 +4,14 @@
+ 
+ export BUILD_ID = \"Build Id: $(shell date +'%m/%d/%y, %H:%M:%S')\"
+ 
+-ifneq (,$(filter $(ocf), y))
++ifneq ($(CFI_OCF_DIR),)
+ obj-m += $(CFI_OCF_DIR)/
+ endif
+ 
+-ifneq (,$(filter $(cryptoapi), y))
++ifneq ($(CFI_CRYPTOAPI_DIR),)
+ obj-m += $(CFI_CRYPTOAPI_DIR)/
+ endif
+ 
+-ifeq ($(SoC),$(filter $(SoC),ipq806x))
++ifeq ($(CFI_IPSEC_DIR),)
+ obj-m += $(CFI_IPSEC_DIR)/
+ endif

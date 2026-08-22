@@ -1,0 +1,79 @@
+Index: qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi.c
+===================================================================
+--- qca-nss-cfi-4e363d52.orig/cryptoapi/v2.0/nss_cryptoapi.c
++++ qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi.c
+@@ -1897,6 +1897,41 @@ struct nss_cryptoapi_algo_info *nss_cryp
+ }
+ 
+ /*
++ * nss_cryptoapi_cra_name_lookup_after()
++ *     Lookup the associated algorithm in NSS for the given transformation by name after given index
++ */
++struct nss_cryptoapi_algo_info *nss_cryptoapi_cra_name_lookup_after(const char *cra_name, int af_idx)
++{
++	struct nss_cryptoapi_algo_info *info = g_algo_info + af_idx;
++	int i;
++
++	for (i = af_idx; i < ARRAY_SIZE(g_algo_info); i++, info++) {
++		if (!strncmp(info->cra_name, cra_name, strlen(cra_name)))
++			return info;
++	}
++
++	return NULL;
++}
++
++/*
++ * nss_cryptoapi_check_cra_name_if_fullysupport()
++ *  Check if a algo can be support fully
++ *  for example , ipq50xx's nss only support aes128,aes256 without aes192
++ */
++bool nss_cryptoapi_check_cra_name_if_fullysupport(const char *cra_name) {
++	struct nss_cryptoapi_algo_info *info = g_algo_info, *last_info;
++	int i = 0;
++
++	while ((last_info = nss_cryptoapi_cra_name_lookup_after(cra_name, i))) {
++		if (!nss_crypto_algo_is_supp(last_info->algo)) 
++			return false;
++		i = (last_info - info)+1;
++	}
++
++	return true;
++}
++
++/*
+  * nss_cryptoapi_status2error()
+  *	Convert the crypto status (if any) into Linux specific errno
+  */
+@@ -2209,6 +2244,10 @@ void nss_cryptoapi_attach_user(void *app
+ 		info = nss_cryptoapi_cra_name_lookup(ablk->cra_name);
+ 		if(!info || !nss_crypto_algo_is_supp(info->algo))
+ 			continue;
++		
++		if (!nss_cryptoapi_check_cra_name_if_fullysupport(ablk->cra_name)) {
++			ablk->cra_flags |= CRYPTO_ALG_NEED_FALLBACK;
++		}
+ 
+ 		if (crypto_register_alg(ablk)) {
+ 			nss_cfi_err("%px: ABLK registration failed(%s)\n", sc, ablk->cra_name);
+@@ -2220,6 +2259,10 @@ void nss_cryptoapi_attach_user(void *app
+ 		info = nss_cryptoapi_cra_name_lookup(aead->base.cra_name);
+ 		if(!info || !nss_crypto_algo_is_supp(info->algo))
+ 			continue;
++	
++		if (!nss_cryptoapi_check_cra_name_if_fullysupport(aead->base.cra_name)) {
++			aead->base.cra_flags |= CRYPTO_ALG_NEED_FALLBACK;
++		}
+ 
+ 		if (crypto_register_aead(aead)) {
+ 			nss_cfi_err("%px: AEAD registration failed(%s)\n", sc, aead->base.cra_name);
+@@ -2232,6 +2275,10 @@ void nss_cryptoapi_attach_user(void *app
+ 		if(!info || !nss_crypto_algo_is_supp(info->algo))
+ 			continue;
+ 
++		if (!nss_cryptoapi_check_cra_name_if_fullysupport(ahash->halg.base.cra_name)) {
++			ahash->halg.base.cra_flags |= CRYPTO_ALG_NEED_FALLBACK;
++		}
++
+ 		if (crypto_register_ahash(ahash)) {
+ 			nss_cfi_err("%px: AHASH registration failed(%s)\n", sc, ahash->halg.base.cra_name);
+ 			ahash->halg.base.cra_flags = 0;

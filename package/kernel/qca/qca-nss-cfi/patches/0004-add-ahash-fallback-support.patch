@@ -1,0 +1,212 @@
+Index: qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi_ahash.c
+===================================================================
+--- qca-nss-cfi-4e363d52.orig/cryptoapi/v2.0/nss_cryptoapi_ahash.c
++++ qca-nss-cfi-4e363d52/cryptoapi/v2.0/nss_cryptoapi_ahash.c
+@@ -107,6 +107,8 @@ int nss_cryptoapi_ahash_cra_init(struct
+ {
+ 	struct nss_cryptoapi_ctx *ctx = crypto_tfm_ctx(tfm);
+ 	struct crypto_ahash *ahash = __crypto_ahash_cast(tfm);
++	struct crypto_ahash *sw_tfm;
++	bool need_fallback;
+ 
+ 	BUG_ON(!ctx);
+ 
+@@ -118,10 +120,28 @@ int nss_cryptoapi_ahash_cra_init(struct
+ 	ctx->stats.init++;
+ 	init_completion(&ctx->complete);
+ 
++	need_fallback = crypto_tfm_alg_flags(tfm) & CRYPTO_ALG_NEED_FALLBACK;
++	if (!need_fallback) {
++		/*
++		* set this tfm reqsize to the transform specific structure
++		*/
++		crypto_ahash_set_reqsize(ahash, sizeof(struct nss_cryptoapi_req_ctx));
++		return 0;
++	}
++
+ 	/*
+-	 * set this tfm reqsize to the transform specific structure
++	 * Alloc fallback transform for future use
+ 	 */
+-	crypto_ahash_set_reqsize(ahash, sizeof(struct nss_cryptoapi_req_ctx));
++	sw_tfm = crypto_alloc_ahash(crypto_tfm_alg_name(tfm), 0, CRYPTO_ALG_ASYNC | CRYPTO_ALG_NEED_FALLBACK);
++	if (IS_ERR(sw_tfm)) {
++		nss_cfi_err("%p: unable to allocate SW_TFM(%s)\n", ctx, crypto_tfm_alg_name(tfm));
++		return -ENOMEM;
++	}
++
++	crypto_ahash_set_reqsize(ahash, max(sizeof(struct nss_cryptoapi_req_ctx), (size_t)crypto_ahash_reqsize(sw_tfm)));
++	ctx->sw_tfm = crypto_ahash_tfm(sw_tfm);
++
++	ctx->fallback_req = false;
+ 
+ 	return 0;
+ };
+@@ -139,6 +159,11 @@ void nss_cryptoapi_ahash_cra_exit(struct
+ 	NSS_CRYPTOAPI_VERIFY_MAGIC(ctx);
+ 	ctx->stats.exit++;
+ 
++	if (!ctx->sw_tfm) {
++		crypto_free_ahash(__crypto_ahash_cast(ctx->sw_tfm));
++		ctx->sw_tfm = NULL;
++	}
++
+ 	if (!atomic_read(&ctx->active)) {
+ 		ctx->stats.failed_exit++;
+ 		return;
+@@ -191,6 +216,33 @@ int nss_cryptoapi_ahash_setkey(struct cr
+ 	}
+ 
+ 	/*
++	 * Check if the algo is supported
++	 */
++
++	if (!nss_crypto_algo_is_supp(ctx->info->algo)) {
++		// Fallback to software 
++		ctx->fallback_req = true;
++		/*
++		 * set flag to fallback tfm
++		 */
++		crypto_tfm_clear_flags(ctx->sw_tfm, CRYPTO_TFM_REQ_MASK);
++		crypto_tfm_set_flags(ctx->sw_tfm, crypto_ahash_get_flags(ahash) & CRYPTO_TFM_REQ_MASK);
++
++		/*
++		 * Set the key for fallback tfm
++		 */
++		status = crypto_ahash_setkey(__crypto_ahash_cast(ctx->sw_tfm), key, keylen);
++		if (status) {
++			nss_cfi_err("Failed to set key to the sw crypto");
++			crypto_ahash_set_flags(ahash, crypto_tfm_get_flags(ctx->sw_tfm));
++		}
++
++		return status;
++	} else {
++		ctx->fallback_req = false;
++	}
++
++	/*
+ 	 * Fill NSS crypto session data
+ 	 */
+ 	data.algo = ctx->info->algo;
+@@ -274,7 +326,7 @@ void nss_cryptoapi_ahash_done(void *app_
+  */
+ int nss_cryptoapi_ahash_init(struct ahash_request *req)
+ {
+-	struct nss_cryptoapi_ctx *ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
++	struct nss_cryptoapi_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
+ 	struct nss_cryptoapi_req_ctx *rctx = ahash_request_ctx(req);
+ 	struct crypto_ahash *ahash = crypto_ahash_reqtfm(req);
+ 	struct crypto_tfm *tfm = crypto_ahash_tfm(ahash);
+@@ -286,6 +338,23 @@ int nss_cryptoapi_ahash_init(struct ahas
+ 	 */
+ 	NSS_CRYPTOAPI_VERIFY_MAGIC(ctx);
+ 
++	if (ctx->fallback_req) {
++		struct crypto_ahash *orig_tfm = crypto_ahash_reqtfm(req);
++
++		BUG_ON(!ctx->sw_tfm);
++
++		ahash_request_set_tfm(req, __crypto_ahash_cast(ctx->sw_tfm));
++		ctx->stats.queued++;
++
++		status = crypto_ahash_init(req);
++		if (!status) {
++			ctx->stats.completed++;
++		}
++
++		ahash_request_set_tfm(req, orig_tfm);
++		return status;
++	}
++
+ 	if (ctx->sid == NSS_CRYPTO_SESSION_MAX) {
+ 		/*
+ 		 * Set the key length to zero as the need is
+@@ -351,6 +420,24 @@ int nss_cryptoapi_ahash_update(struct ah
+ 	NSS_CRYPTOAPI_VERIFY_MAGIC(ctx);
+ 	NSS_CRYPTOAPI_AHASH_VERIFY_MAGIC(rctx);
+ 
++	if (ctx->fallback_req) {
++		struct crypto_ahash *orig_tfm = crypto_ahash_reqtfm(req);
++		int status;
++
++		BUG_ON(!ctx->sw_tfm);
++
++		ahash_request_set_tfm(req, __crypto_ahash_cast(ctx->sw_tfm));
++		ctx->stats.queued++;
++
++		status = crypto_ahash_update(req);
++		if (!status) {
++			ctx->stats.completed++;
++		}
++
++		ahash_request_set_tfm(req, orig_tfm);
++		return status;
++	}
++
+ 	/*
+ 	 * Check if cryptoapi context is active or not
+ 	 */
+@@ -411,7 +498,7 @@ int nss_cryptoapi_ahash_update(struct ah
+  */
+ int nss_cryptoapi_ahash_final(struct ahash_request *req)
+ {
+-	struct nss_cryptoapi_ctx *ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
++	struct nss_cryptoapi_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
+ 	struct crypto_ahash *ahash = crypto_ahash_reqtfm(req);
+ 	struct nss_cryptoapi_req_ctx *rctx = ahash_request_ctx(req);
+ 
+@@ -421,6 +508,24 @@ int nss_cryptoapi_ahash_final(struct aha
+ 	NSS_CRYPTOAPI_VERIFY_MAGIC(ctx);
+ 	NSS_CRYPTOAPI_AHASH_VERIFY_MAGIC(rctx);
+ 
++	if (ctx->fallback_req) {
++		struct crypto_ahash *orig_tfm = crypto_ahash_reqtfm(req);
++		int status;
++
++		BUG_ON(!ctx->sw_tfm);
++
++		ahash_request_set_tfm(req, __crypto_ahash_cast(ctx->sw_tfm));
++		ctx->stats.queued++;
++
++		status = crypto_ahash_final(req);
++		if (!status) {
++			ctx->stats.completed++;
++		}
++
++		ahash_request_set_tfm(req, orig_tfm);
++		return status;
++	}
++
+ 	BUG_ON(!req->result);
+ 	memcpy(req->result, rctx->digest, crypto_ahash_digestsize(ahash));
+ 
+@@ -433,9 +538,29 @@ int nss_cryptoapi_ahash_final(struct aha
+  */
+ int nss_cryptoapi_ahash_digest(struct ahash_request *req)
+ {
++	struct nss_cryptoapi_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
++
+ 	if (nss_cryptoapi_ahash_init(req) < 0)
+ 		return -EINVAL;
+ 
++	if (ctx->fallback_req) {
++		struct crypto_ahash *orig_tfm = crypto_ahash_reqtfm(req);
++		int status;
++
++		BUG_ON(!ctx->sw_tfm);
++
++		ahash_request_set_tfm(req, __crypto_ahash_cast(ctx->sw_tfm));
++		ctx->stats.queued++;
++
++		status = crypto_ahash_digest(req);
++		if (!status) {
++			ctx->stats.completed++;
++		}
++
++		ahash_request_set_tfm(req, orig_tfm);
++		return status;
++	}
++
+ 	return nss_cryptoapi_ahash_update(req);
+ }
+ 
